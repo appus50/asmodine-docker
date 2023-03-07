@@ -1,0 +1,282 @@
+version: '3'
+
+services:
+    # ##########
+    # DATABASE
+    # ##########
+    admin-backoffice-db:
+        image: mysql:${MYSQL_VERSION}
+        container_name: asmodine_admin_backoffice_mysql
+        command: --default-authentication-plugin=mysql_native_password
+        restart: on-failure
+        volumes:
+            - ./.data/mysql/admin_backoffice:/var/lib/mysql:delegated
+            - ./var/log/mysql/admin_backoffice:/var/log/mysql:delegated
+            - ./config/mysql/admin_backoffice.cnf:/etc/mysql/conf.d/admin_backoffice.cnf:consistent
+        env_file:
+            - ./db.backoffice.env
+
+    admin-catalog-db:
+        image: mysql:${MYSQL_VERSION}
+        container_name: asmodine_admin_catalog_mysql
+        command: --default-authentication-plugin=mysql_native_password
+        restart: on-failure
+        volumes:
+            - ./.data/mysql/admin_catalog:/var/lib/mysql:delegated
+            - ./var/log/mysql/admin_catalog:/var/log/mysql:delegated
+            - ./config/mysql/admin_backoffice.cnf:/etc/mysql/conf.d/admin_backoffice.cnf:consistent
+        env_file:
+            - ./db.catalog.env
+
+    admin-pim-db:
+        image: mysql:${MYSQL_VERSION}
+        container_name: asmodine_admin_pim_mysql
+        command: --default-authentication-plugin=mysql_native_password
+        restart: on-failure
+        volumes:
+            - ./.data/mysql/admin_pim:/var/lib/mysql:delegated
+            - ./var/log/mysql/admin_pim:/var/log/mysql:delegated
+            - ./config/mysql/admin_pim.cnf:/etc/mysql/conf.d/admin_backoffice.cnf:consistent
+        env_file:
+            - ./db.pim.env
+
+
+    front-db:
+        image: mysql:${MYSQL_VERSION}
+        container_name: asmodine_front_mysql
+        command: --default-authentication-plugin=mysql_native_password
+        restart: on-failure
+        volumes:
+            - ./.data/mysql/front:/var/lib/mysql:delegated
+            - ./var/log/mysql/front:/var/log/mysql:delegated
+            - ./config/mysql/front.cnf:/etc/mysql/conf.d/admin_backoffice.cnf:consistent
+        env_file:
+            - ./db.front.env
+
+    # ##########
+    # PHP
+    # ##########
+    admin-php:
+        build:
+            context: ./container/php
+            args:
+                PHP_VERSION: ${PHP_VERSION}
+                APCU_VERSION: ${APCU_VERSION}
+                AMQP_VERSION: ${AMQP_VERSION}
+                COMPOSER_VERSION: ${COMPOSER_VERSION}
+                COMPOSER_ALLOW_SUPERUSER: ${COMPOSER_ALLOW_SUPERUSER}
+                COMPOSER_NO_INTERACTION: ${COMPOSER_NO_INTERACTION}
+        container_name: asmodine_admin_php
+        restart: on-failure
+        links:
+            - rabbitmq
+            - admin-backoffice-db
+            - admin-catalog-db
+            - admin-pim-db
+            - elasticsearch
+            - memcached-admin
+        working_dir: /var/www/admin
+        volumes:
+            - ${APP_ASMODINE_PHP_BACKOFFICE}:/var/www/admin:cached
+            - ./home/back_php:/root:delegated
+            - ./container/php/cron/root:/etc/crontabs/root
+            - ./config/php/admin/www.conf:/usr/local/etc/php-fpm.d/www.conf:delegated
+
+    front-php:
+        build:
+            context: ./container/php
+            args:
+                PHP_VERSION: ${PHP_VERSION}
+                APCU_VERSION: ${APCU_VERSION}
+                AMQP_VERSION: ${AMQP_VERSION}
+                COMPOSER_VERSION: ${COMPOSER_VERSION}
+                COMPOSER_ALLOW_SUPERUSER: ${COMPOSER_ALLOW_SUPERUSER}
+                COMPOSER_NO_INTERACTION: ${COMPOSER_NO_INTERACTION}
+        container_name: asmodine_front_php
+        restart: on-failure
+        links:
+            - rabbitmq
+            - front-db
+            - elasticsearch
+            - elasticsearch-analytics
+            - extrapolation-python
+            - memcached-front
+        working_dir: /var/www/front
+        volumes:
+            - ${APP_ASMODINE_PHP_FRONT}:/var/www/front:cached
+            - ./home/front_php:/root:delegated
+            - ./config/php/front/www.conf:/usr/local/etc/php-fpm.d/www.conf:delegated
+
+    ## PHP Worker
+    admin-php-workers:
+        build:
+            context: ./container/php
+            args:
+                PHP_VERSION: ${PHP_VERSION}
+                APCU_VERSION: ${APCU_VERSION}
+                AMQP_VERSION: ${AMQP_VERSION}
+                COMPOSER_VERSION: ${COMPOSER_VERSION}
+                COMPOSER_ALLOW_SUPERUSER: ${COMPOSER_ALLOW_SUPERUSER}
+                COMPOSER_NO_INTERACTION: ${COMPOSER_NO_INTERACTION}
+        container_name: asmodine_admin_php_workers
+        restart: on-failure
+        links:
+            - rabbitmq
+            - admin-backoffice-db
+            - admin-catalog-db
+            - admin-pim-db
+            - elasticsearch
+            - memcached-admin
+        working_dir: /var/www/admin
+        command: ./bin/workers
+        volumes:
+            - ${APP_ASMODINE_PHP_BACKOFFICE}:/var/www/admin:cached
+            - ./home/back_php:/root:delegated
+            - ./container/php/cron/root:/etc/crontabs/root
+            - ./config/php/admin/www.conf:/usr/local/etc/php-fpm.d/www.conf:delegated
+
+
+    # ##########
+    # Python
+    # ##########
+    extrapolation-python:
+        build:
+            context: ./container/python
+            args:
+                UBUNTU_VERSION: ${UBUNTU_VERSION}
+        container_name: asmodine_extrapolation_python
+        restart: on-failure
+        working_dir: /var/www/extrapolation
+        command: python3 ./src/main/python/api/server.py --conf ./conf/default.conf
+        volumes:
+            - ${APP_ASMODINE_PYTHON_EXTRAPOLATION}:/var/www/extrapolation:cached
+            - ./home/extrapolation_python:/root:delegated
+
+    apis-python:
+        build:
+            context: ./container/python
+            args:
+                UBUNTU_VERSION: ${UBUNTU_VERSION}
+        container_name: asmodine_apis_python
+        restart: on-failure
+        links:
+          - admin-pim-db
+          - front-db
+          - rabbitmq
+          - elasticsearch
+        working_dir: /var/www/apis
+        command: python3 -u ./src/main/python/movitexMain.py -e .env
+        volumes:
+            - ${APP_ASMODINE_PYTHON_APIS}:/var/www/apis:cached
+            - ./home/apis_python:/root:delegated
+
+    sizeguide-import-python:
+        build:
+            context: ./container/python-sizeguide
+            args:
+                UBUNTU_VERSION: ${UBUNTU_VERSION}
+        container_name: asmodine_import_python
+        restart: on-failure
+        links:
+            - admin-pim-db
+        working_dir: /var/www/import/scripts_excel_importer
+        # command: python ./real_uploader_v1.py
+        volumes:
+            - ${APP_ASMODINE_PYTHON_IMPORT}:/var/www/import:cached
+            - ./home/apis_python:/root:delegated
+
+
+    # ##########
+    # AMPQ
+    # ##########
+    rabbitmq:
+        image: rabbitmq:${RABBITMQ_VERSION}-management-alpine
+        container_name: asmodine_rabbitmq
+        restart: on-failure
+        env_file:
+            - ./rabbitmq.env
+
+    # ##########
+    # Elasticsearch
+    # ##########
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
+        container_name: asmodine_elasticsearch
+        restart: on-failure
+        env_file:
+            - ./elasticsearch.env
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        volumes:
+            - ./.data/elasticsearch:/usr/share/elasticsearch/data:delegated
+
+
+    # ##########
+    # Analytics
+    # ##########
+    elasticsearch-analytics:
+        image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
+        container_name: asmodine_elasticsearch_analytics
+        restart: on-failure
+        env_file:
+            - ./elasticsearch-analytics.env
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        volumes:
+            - ./.data/elasticsearch-analytics:/usr/share/elasticsearch/data:delegated
+
+
+    kibana-analytics:
+        image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION}
+        container_name: asmodine_kibana_analytics
+        restart: on-failure
+        # network_mode: bridge
+
+        links:
+            - elasticsearch-analytics
+        volumes:
+            - ./config/kibana-analytics/kibana.yml:/usr/share/kibana/config/kibana.yml:delegated
+        ports:
+            - 8561:8561
+        env_file:
+            - kibana-analytics.env
+
+    # ##########
+    # NGINX
+    # ##########
+    nginx:
+        build:
+            context: ./container/nginx
+            args:
+                NGINX_VERSION: ${NGINX_VERSION}
+        container_name: asmodine_nginx
+        restart: on-failure
+        links:
+            - admin-php
+            - front-php
+        ports:
+            - 80:80
+            - 443:443
+        volumes:
+            - ${APP_ASMODINE_PHP_BACKOFFICE}:/var/www/admin:cached
+            - ${APP_ASMODINE_PHP_FRONT}:/var/www/front:cached
+            - ${APP_ASMODINE_LIBS}:/var/www/libs:cached
+            - ./config/nginx/ssl:/etc/nginx/ssl:cached
+            - ./var/log/nginx:/var/log/nginx:delegated
+
+    # #########
+    # Memcached
+    # #########
+    memcached-front:
+        image: memcached:${MEMCACHED_VERSION}-alpine
+        container_name: asmodine_memcached_front
+        restart: on-failure
+
+    memcached-admin:
+        image: memcached:${MEMCACHED_VERSION}-alpine
+        container_name: asmodine_memcached_admin
+        restart: on-failure

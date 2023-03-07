@@ -1,0 +1,6 @@
+[mysqld]
+tmp_table_size = 1024M
+max_heap_table_size = 1024M
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow_query.log
+long_query_time = 20

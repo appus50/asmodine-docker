@@ -1,0 +1,96 @@
+version: '3'
+
+services:
+    admin-node:
+        build:
+            context: ./container/node-webpack
+            args:
+                NODE_VERSION: ${NODE_VERSION}
+        container_name: asmodine_admin_node_dev
+        working_dir: /var/www/admin
+        volumes:
+            - ${APP_ASMODINE_PHP_BACKOFFICE}:/var/www/admin:cached
+            - ./home/admin_node:/root:delegated
+
+    front-node:
+        build:
+            context: ./container/node-webpack
+            args:
+                NODE_VERSION: ${NODE_VERSION}
+        container_name: asmodine_front_node_dev
+        working_dir: /var/www/front
+        volumes:
+            - ${APP_ASMODINE_PHP_FRONT}:/var/www/front:cached
+            - ./home/front_node:/root:delegated
+
+    admin-backoffice-db:
+        ports:
+            - 3330:3306
+
+    admin-catalog-db:
+        ports:
+            - 3331:3306
+
+    admin-pim-db:
+        ports:
+            - 3332:3306
+
+    front-db:
+        ports:
+            - 3329:3306
+
+    rabbitmq:
+        ports:
+            - 8072:15672
+            - 5672:5672
+
+    elasticsearch:
+        ports:
+            - 2099:9200
+
+    kibana:
+        image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION}
+        container_name: asmodine_kibana
+        # network_mode: bridge
+        restart: on-failure
+        links:
+            - elasticsearch
+        volumes:
+            - ./config/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:delegated
+        ports:
+            - 8056:8056
+        env_file:
+            - kibana.env
+
+    extrapolation-python:
+        ports:
+            - 2050:5000
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin:${PHPMYADMIN_VERSION}
+        container_name: asmodine_phpmyadmin
+        ports:
+            - 8036:80
+        links:
+            - admin-catalog-db
+            - admin-backoffice-db
+            - admin-pim-db
+        env_file:
+            - ./phpmyadmin.env
+
+    adminer:
+        image: adminer:${ADMINER_VERSION}
+        container_name: asmodine_adminer
+        ports:
+            - 8037:8080
+        links:
+            - admin-catalog-db
+            - admin-backoffice-db
+            - admin-pim-db
+
+    mailcatcher:
+        build: container/mailcatcher
+        container_name: asmodine_mailcatcher
+        ports:
+            - 1025:1025
+            - 1080:1080

@@ -1,0 +1,12 @@
+[mysqld]
+tmp_table_size = 8192M
+max_heap_table_size = 8192M
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow_query.log
+long_query_time = 5
+
+innodb_lru_scan_depth=1024
+innodb_purge_threads=8
+innodb_page_cleaners=64
+innodb_read_io_threads=16
+innodb_write_io_threads=16

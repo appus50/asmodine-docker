@@ -1,0 +1,18 @@
+!.env
+*.env
+/home/*
+/var/*
+/.data/*
+/config/nginx/ssl/*
+/container/nginx/admin.conf
+/container/nginx/front.conf
+/container/nginx/libs.conf
+/config/kibana/kibana.yml
+/config/kibana-analytics/kibana.yml
+
+
+# Dev
+*.tmp.*
+*.tmp
+.idea
+.DS_Store

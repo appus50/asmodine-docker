@@ -1,0 +1,1 @@
+*/10 * * * * php  /var/www/admin/bin/console app:cron >> /var/www/admin/var/log/cron.log 2>&1
